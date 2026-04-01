@@ -10,9 +10,11 @@ import {
 import { RutasService } from './rutas.service';
 import { CreateRutaDto } from './dto/create-ruta.dto';
 import { UpdateRutaDto } from './dto/update-ruta.dto';
-import { CreateRutaGeneralDto } from './dto/create-ruta-general';
+import {
+  CreateRutaGeneralDto,
+  UpdateRutaGeneralDto,
+} from './dto/create-ruta-general';
 import { ApiBody } from '@nestjs/swagger';
-import { PuntoDto } from 'src/puntos/dto/punto-dto';
 import { BusquedaRutaDto } from './dto/busqueda-ruta-dto';
 
 @Controller('rutas')
@@ -31,32 +33,32 @@ export class RutasController {
     return this.rutasService.create_general(CreateRutaGeneralDto);
   }
 
+  @Patch('rutas_general/:id')
+  @ApiBody({ type: UpdateRutaGeneralDto })
+  async update_general(
+    @Param('id') id: number,
+    @Body() updateRutaGeneralDto: UpdateRutaGeneralDto,
+  ) {
+    return this.rutasService.update_general(+id, updateRutaGeneralDto);
+  }
+
   @Get()
-  findAllGeneral() {
-    return this.rutasService.findAllGeneral();
+  findAll() {
+    return this.rutasService.findAll();
   }
 
   @Get(':id')
-  findOneGeneral(@Param('id') id: number) {
-    return this.rutasService.findOneGeneral(+id);
+  findOne(@Param('id') id: number) {
+    return this.rutasService.findOne(+id);
   }
-  // @Get()
-  // findAll() {
-  //   return this.rutasService.findAll();
-  // }
-
-  // @Get(':id')
-  // findOne(@Param('id') id: number) {
-  //   return this.rutasService.findOne(+id);
-  // }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRutaDto: UpdateRutaDto) {
-    return this.rutasService.update(+id, updateRutaDto);
+  async update(@Param('id') id: number, @Body() updateRutaDto: UpdateRutaDto) {
+    return await this.rutasService.update(+id, updateRutaDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id') id: number) {
     return this.rutasService.remove(+id);
   }
   @Get('debug/grafo')
@@ -82,4 +84,16 @@ export class RutasController {
     return this.rutasService.encontrarNodoCercano(latOrigen, lonOrigen);
   }
   // rutas.controller.ts}
+  @Post('rutas-alternativas')
+  async buscarRutasAlternativas(@Body() busquedaDto: BusquedaRutaDto) {
+    console.log('busquedaDto', busquedaDto);
+    const { latOrigen, lonOrigen, latDestino, lonDestino } = busquedaDto;
+
+    return this.rutasService.buscarRutasAlternativas(
+      latOrigen,
+      lonOrigen,
+      latDestino,
+      lonDestino,
+    );
+  }
 }

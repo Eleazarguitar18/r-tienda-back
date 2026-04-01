@@ -15,4 +15,4 @@ export class CreateRutaGeneralDto {
   @IsNotEmpty()
   puntos: CreatePuntoDto[];
 }
-export class UpdateCustomerDto extends PartialType(CreateRutaGeneralDto) {}
+export class UpdateRutaGeneralDto extends PartialType(CreateRutaGeneralDto) {}

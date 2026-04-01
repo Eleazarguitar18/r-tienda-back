@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { CreateRutaDto } from './dto/create-ruta.dto';
 import { UpdateRutaDto } from './dto/update-ruta.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,7 +8,7 @@ import { Ruta } from './entities/ruta.entity';
 import { Repository } from 'typeorm';
 import { LineasService } from 'src/lineas/lineas.service';
 import { CreateLineaDto } from 'src/lineas/dto/create-linea.dto';
-import { CreateRutaGeneralDto } from './dto/create-ruta-general';
+import { CreateRutaGeneralDto, UpdateRutaGeneralDto } from './dto/create-ruta-general';
 import { Linea } from 'src/lineas/entities/linea.entity';
 import { CreatePuntoDto } from 'src/puntos/dto/create-punto.dto';
 import { PuntosService } from 'src/puntos/puntos.service';
@@ -39,11 +41,13 @@ export class RutasService implements OnModuleInit {
     private rutaPuntoRepository: Repository<RutaPunto>,
     private readonly lineaService: LineasService,
     private readonly puntosService: PuntosService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
   async create(createRutaDto: CreateRutaDto) {
     const ruta: Ruta = this.rutaRepository.create(createRutaDto);
-    return this.rutaRepository.save(ruta);
-    // return 'This action adds a new ruta';
+    const result = await this.rutaRepository.save(ruta);
+    await this.refreshAll();
+    return result;
   }
   async create_ruta_puntos(createRutaPuntosDto: CreateRutaPuntosDto) {
     const rutaPuntos: RutaPunto =
@@ -73,7 +77,7 @@ export class RutasService implements OnModuleInit {
       };
       await this.create_ruta_puntos(rutaPuntosDto);
     }
-    return {
+    const result = {
       status: 201,
       success: true,
       message: 'Se creo la ruta con exito!',
@@ -83,11 +87,83 @@ export class RutasService implements OnModuleInit {
         puntos: puntos,
       },
     };
+    await this.refreshAll();
+    return result;
   }
 
-  async findAllGeneral() {
-    const rutas = await this.rutaRepository.find({
+  async update_general(id: number, updateRutaGeneralDto: UpdateRutaGeneralDto) {
+    const ruta_update = await this.update_general_logic(id, updateRutaGeneralDto);
+    await this.refreshAll();
+    return ruta_update;
+  }
+
+  private async update_general_logic(id: number, updateRutaGeneralDto: UpdateRutaGeneralDto) {
+    const ruta = await this.rutaRepository.findOne({
+      where: { id },
       relations: ['linea', 'rutaPuntos'],
+    });
+
+    if (!ruta) {
+      throw new NotFoundException(`Ruta con id ${id} no encontrada`);
+    }
+
+    // 1. Actualizar la Linea
+    if (updateRutaGeneralDto.linea) {
+      await this.lineaService.update(ruta.linea.id, updateRutaGeneralDto.linea);
+    }
+
+    // 2. Actualizar la Ruta
+    if (updateRutaGeneralDto.ruta) {
+      const { linea, ...rutaData } = updateRutaGeneralDto.ruta;
+      await this.rutaRepository.update(id, rutaData);
+    }
+
+    // 3. Actualizar los Puntos (Eliminar y recrear)
+    if (updateRutaGeneralDto.puntos) {
+      // Eliminar relaciones existentes
+      await this.rutaPuntoRepository.delete({ ruta: { id } });
+
+      let orden = 1;
+      const puntos: Punto[] = [];
+      for (const puntoDto of updateRutaGeneralDto.puntos) {
+        const punto: Punto = await this.puntosService.create(puntoDto);
+        puntos.push(punto);
+        const rutaPuntosDto: CreateRutaPuntosDto = {
+          ruta: ruta,
+          punto: punto,
+          orden: orden++,
+          distancia_siguiente:
+            puntoDto.distancia_al_siguiente === null
+              ? 0
+              : puntoDto.distancia_al_siguiente,
+        };
+        await this.create_ruta_puntos(rutaPuntosDto);
+      }
+    }
+
+    // Recargar la ruta completa para devolverla
+    const rutaActualizada = await this.findOne(id);
+
+    return {
+      status: 200,
+      success: true,
+      message: 'Ruta actualizada con éxito (General)!',
+      data: rutaActualizada.data,
+    };
+  }
+
+  async findAll() {
+    const rutas = await this.rutaRepository.find({
+      where: {
+        estado: true,
+        linea: { estado: true },
+      },
+      relations: {
+        linea: true, // Trae los datos de la línea
+        rutaPuntos: {
+          punto: true, // Trae los datos del punto
+        },
+      },
     });
     return {
       status: 200,
@@ -97,14 +173,16 @@ export class RutasService implements OnModuleInit {
     };
   }
 
-  async findOneGeneral(id: number) {
+  async findOne(id: number) {
     const ruta = await this.rutaRepository.findOne({
       where: { id },
       relations: ['linea', 'rutaPuntos'],
     });
+
     if (!ruta) {
       throw new NotFoundException(`Ruta con id ${id} no encontrada`);
     }
+
     return {
       status: 200,
       success: true,
@@ -113,20 +191,49 @@ export class RutasService implements OnModuleInit {
     };
   }
 
-  findAll() {
-    return `This action returns all rutas`;
+  async update(id: number, updateRutaDto: UpdateRutaDto) {
+    const ruta = await this.rutaRepository.preload({
+      id: id,
+      ...updateRutaDto,
+    });
+
+    if (!ruta) {
+      throw new NotFoundException(`Ruta con id ${id} no encontrada`);
+    }
+
+    const ruta_update = await this.rutaRepository.save(ruta);
+    await this.refreshAll();
+    return {
+      status: 200,
+      success: true,
+      message: 'Ruta actualizada con éxito!',
+      data: ruta_update,
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} ruta`;
+  async remove(id: number) {
+    const ruta = await this.findOne(id);
+    ruta.data.estado = false;
+    await this.rutaRepository.save(ruta.data);
+    await this.refreshAll();
+    return {
+      status: 200,
+      success: true,
+      message: 'Ruta eliminada con éxito!',
+    };
   }
 
-  update(id: number, updateRutaDto: UpdateRutaDto) {
-    return `This action updates a #${id} ruta`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} ruta`;
+  private async refreshAll() {
+    await this.construirGrafo();
+    // Limpiamos el caché para evitar datos obsoletos tras cambios en las rutas.
+    const manager = this.cacheManager as any;
+    if (typeof manager.reset === 'function') {
+      await manager.reset();
+    } else if (typeof manager.clear === 'function') {
+      await manager.clear();
+    } else if (typeof manager.store?.reset === 'function') {
+      await manager.store.reset();
+    }
   }
   async onModuleInit() {
     console.log('El módulo de rutas se ha iniciado en Debian...');
@@ -138,8 +245,9 @@ export class RutasService implements OnModuleInit {
   }
   private grafo = new DirectedGraph<INodoGrafo>();
   private async construirGrafo() {
-    this.grafo.clear(); // Limpiamos para evitar duplicados al reiniciar
+    const nuevoGrafo = new DirectedGraph<INodoGrafo>();
     const rutas = await this.rutaRepository.find({
+      where: { estado: true },
       relations: ['rutaPuntos', 'rutaPuntos.punto', 'linea'],
     });
 
@@ -152,11 +260,10 @@ export class RutasService implements OnModuleInit {
       puntosOrdenados.forEach((rp, index) => {
         const nodoId = rp.id.toString();
 
-        // Aseguramos que lat/lon sean números
         const lat = Number(rp.punto.latitud);
         const lon = Number(rp.punto.longitud);
 
-        this.grafo.mergeNode(nodoId, {
+        nuevoGrafo.mergeNode(nodoId, {
           id: nodoId,
           lat: lat,
           lon: lon,
@@ -164,17 +271,14 @@ export class RutasService implements OnModuleInit {
           lineaNombre: ruta.linea.numero,
         });
 
-        // Aristas de trayecto (Bus)
         if (index < puntosOrdenados.length - 1) {
           const siguienteId = puntosOrdenados[index + 1].id.toString();
-          this.grafo.mergeEdge(nodoId, siguienteId, {
+          nuevoGrafo.mergeEdge(nodoId, siguienteId, {
             weight: Number(rp.distancia_siguiente) || 500,
             tipo: 'minibus',
           });
         }
 
-        // IMPORTANTE: Usamos la coordenada como llave de transbordo
-        // Esto conecta nodos si están en el mismo lugar exacto, tengan el ID que tengan
         const coordKey = `${lat.toFixed(6)},${lon.toFixed(6)}`;
         const lista = paradasFisicas.get(coordKey) || [];
         lista.push(nodoId);
@@ -182,14 +286,13 @@ export class RutasService implements OnModuleInit {
       });
     });
 
-    // Generar transbordos
     let transbordosCreados = 0;
     paradasFisicas.forEach((nodos) => {
       if (nodos.length > 1) {
         for (const idA of nodos) {
           for (const idB of nodos) {
             if (idA !== idB) {
-              this.grafo.mergeEdge(idA, idB, {
+              nuevoGrafo.mergeEdge(idA, idB, {
                 weight: 1000,
                 tipo: 'TRANSBORDO',
               });
@@ -200,10 +303,12 @@ export class RutasService implements OnModuleInit {
       }
     });
 
-    console.log(`--- REPORTE DE GRAFO ---`);
+    // Atomic Swap
+    this.grafo = nuevoGrafo;
+
+    console.log(`--- REPORTE DE GRAFO (ACTUALIZADO) ---`);
     console.log(`Nodos: ${this.grafo.order}`);
-    console.log(`Aristas Bus: ${this.grafo.size - transbordosCreados}`);
-    console.log(`Aristas Transbordo: ${transbordosCreados}`);
+    console.log(`Aristas: ${this.grafo.size}`);
   }
   // private async construirGrafo() {
   //   const rutas = await this.rutaRepository.find({
@@ -255,6 +360,10 @@ export class RutasService implements OnModuleInit {
     latDestino: number,
     lonDestino: number,
   ) {
+    const cacheKey = `ruta:optima:${latOrigen}:${lonOrigen}:${latDestino}:${lonDestino}`;
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) return cached;
+
     // 1. Encontrar los nodos más cercanos al origen y destino
     const nodoInicio = this.encontrarNodoCercano(latOrigen, lonOrigen);
     const nodoFin = this.encontrarNodoCercano(latDestino, lonDestino);
@@ -277,7 +386,9 @@ export class RutasService implements OnModuleInit {
       return { mensaje: 'No hay ruta disponible entre estos puntos' };
 
     // 3. Formatear la respuesta para el usuario
-    return this.formatearResultado(camino);
+    const resultado = this.formatearResultado(camino);
+    await this.cacheManager.set(cacheKey, resultado, 3600000); // 1 hora de caché
+    return resultado;
   }
   // Método auxiliar para buscar el nodo más cercano (distancia simple)
   public encontrarNodoCercano(lat: number, lon: number): string | null {
@@ -329,5 +440,58 @@ export class RutasService implements OnModuleInit {
       },
       camino: rutaCompleta,
     };
+  }
+
+  async buscarRutasAlternativas(
+    latO: number,
+    lonO: number,
+    latD: number,
+    lonD: number,
+  ) {
+    const cacheKey = `ruta:alternativa:${latO}:${lonO}:${latD}:${lonD}`;
+    const cached = await this.cacheManager.get(cacheKey);
+    if (cached) return cached;
+
+    const inicio = this.encontrarNodoCercano(latO, lonO);
+    const fin = this.encontrarNodoCercano(latD, lonD);
+
+    if (!inicio || !fin) return { mensaje: 'Puntos no encontrados' };
+
+    // 1. Ruta Principal
+    const ruta1 = dijkstra.bidirectional(
+      this.grafo,
+      inicio,
+      fin,
+      (_, attr) => Number(attr.weight) || 500,
+    );
+
+    if (!ruta1) return { mensaje: 'No hay rutas disponibles' };
+
+    // 2. Identificar aristas de la ruta 1 para penalizarlas
+    const aristasRuta1 = new Set<string>();
+    for (let i = 0; i < ruta1.length - 1; i++) {
+      const edgeId = this.grafo.edge(ruta1[i], ruta1[i + 1]);
+      if (edgeId) aristasRuta1.add(edgeId); // <-- Aquí se soluciona el error
+    }
+
+    // 3. Ruta Alternativa (Penalizando la anterior)
+    const ruta2 = dijkstra.bidirectional(
+      this.grafo,
+      inicio,
+      fin,
+      (edge, attr) => {
+        const pesoBase = Number(attr.weight) || 500;
+        // Si la arista ya se usó, la hacemos 10 veces más "cara"
+        return aristasRuta1.has(edge) ? pesoBase * 10 : pesoBase;
+      },
+    );
+
+    const resultado = {
+      mejor_ruta: this.formatearResultado(ruta1),
+      alternativa: ruta2 ? this.formatearResultado(ruta2) : null,
+    };
+
+    await this.cacheManager.set(cacheKey, resultado, 3600000); // 1 hora de caché
+    return resultado;
   }
 }
