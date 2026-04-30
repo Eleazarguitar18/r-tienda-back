@@ -7,6 +7,8 @@ import { MovimientoCaja } from './entities/movimiento-caja.entity';
 import { AbrirCajaDto } from './dto/abrir-caja.dto';
 import { CerrarCajaDto } from './dto/cerrar-caja.dto';
 import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
+import { CreateCajaDto } from './dto/create-caja.dto';
+import { UpdateCajaDto } from './dto/update-caja.dto';
 
 @Injectable()
 export class CajasService {
@@ -19,6 +21,11 @@ export class CajasService {
     private readonly movimientoCajaRepository: Repository<MovimientoCaja>,
   ) {}
 
+  async create(createCajaDto: CreateCajaDto): Promise<Caja> {
+    const caja = this.cajaRepository.create(createCajaDto);
+    return this.cajaRepository.save(caja);
+  }
+
   async findAllCajas(): Promise<Caja[]> {
     return this.cajaRepository.find({ where: { estado: true } });
   }
@@ -30,6 +37,12 @@ export class CajasService {
     });
     if (!caja) throw new NotFoundException(`Caja con ID ${id} no encontrada o inactiva`);
     return caja;
+  }
+
+  async update(id: number, updateCajaDto: UpdateCajaDto): Promise<Caja> {
+    const caja = await this.findCaja(id);
+    const updatedCaja = Object.assign(caja, updateCajaDto);
+    return this.cajaRepository.save(updatedCaja);
   }
 
   async abrirCaja(abrirCajaDto: AbrirCajaDto): Promise<SesionCaja> {

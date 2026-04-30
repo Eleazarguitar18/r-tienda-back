@@ -1,0 +1,60 @@
+{
+  "modulo": "Cajas",
+  "base_path": "/cajas",
+  "rutas": [
+    {
+      "metodo": "GET",
+      "path": "/",
+      "descripcion": "Listar todas las cajas físicas activas",
+      "accion": "findAllCajas"
+    },
+    {
+      "metodo": "POST",
+      "path": "/",
+      "descripcion": "Crear una nueva caja física",
+      "accion": "createCaja",
+      "body": "CreateCajaDto"
+    },
+    {
+      "metodo": "GET",
+      "path": "/:id",
+      "descripcion": "Obtener detalles de una caja específica",
+      "accion": "findCaja"
+    },
+    {
+      "metodo": "PATCH",
+      "path": "/:id",
+      "descripcion": "Actualizar datos de una caja física",
+      "accion": "updateCaja",
+      "body": "UpdateCajaDto"
+    },
+    {
+      "metodo": "DELETE",
+      "path": "/:id",
+      "descripcion": "Inactivar (eliminación lógica) una caja",
+      "accion": "removeCaja",
+      "query": ["id_user_update"]
+    },
+    {
+      "metodo": "POST",
+      "path": "/abrir",
+      "descripcion": "Abrir una nueva sesión de caja",
+      "accion": "abrirCaja",
+      "body": "AbrirCajaDto"
+    },
+    {
+      "metodo": "PATCH",
+      "path": "/sesion/:id/cerrar",
+      "descripcion": "Cerrar una sesión de caja activa",
+      "accion": "cerrarCaja",
+      "body": "CerrarCajaDto"
+    },
+    {
+      "metodo": "POST",
+      "path": "/movimiento",
+      "descripcion": "Registrar un movimiento (ingreso/egreso) en una sesión abierta",
+      "accion": "crearMovimiento",
+      "body": "CrearMovimientoDto"
+    }
+  ]
+}
