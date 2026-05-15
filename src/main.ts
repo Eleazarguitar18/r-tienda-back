@@ -7,10 +7,11 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = new DocumentBuilder()
-    .setTitle('Cats example')
-    .setDescription('The cats API description')
+    .setTitle('Kantuta POS API')
+    .setDescription('The kantuta pos api description')
     .setVersion('1.0')
-    .addTag('cats')
+    .addBearerAuth()
+    .addTag('users')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);

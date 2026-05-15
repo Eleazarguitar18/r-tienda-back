@@ -2,8 +2,9 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { InventarioService } from './inventario.service';
 import { CrearCategoriaDto } from './dto/crear-categoria.dto';
 import { ActualizarCategoriaDto } from './dto/actualizar-categoria.dto';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiBearerAuth()
 @ApiTags('categorías')
 @Controller('categorias')
 export class CategoriasController {

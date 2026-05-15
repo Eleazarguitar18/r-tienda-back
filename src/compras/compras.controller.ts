@@ -1,12 +1,12 @@
 import { Controller, Post, Body, Get } from '@nestjs/common';
 import { ComprasService } from './compras.service';
 import { CrearCompraDto } from './dto/crear-compra.dto';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+@ApiBearerAuth()
 @ApiTags('compras')
 @Controller('compras')
 export class ComprasController {
-  constructor(private readonly comprasService: ComprasService) {}
+  constructor(private readonly comprasService: ComprasService) { }
 
   @Post()
   @ApiOperation({ summary: 'Registrar una compra de stock y actualizar inventario' })
